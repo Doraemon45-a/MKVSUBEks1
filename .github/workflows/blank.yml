@@ -6,7 +6,6 @@ on:
       source_url:
         description: "URL file MKV"
         required: true
-        default: "https://tipigd.tipikug.workers.dev/0:/MirrorFolder%20oleh%20kaelamirrorbot/Lilo.and.Stitch.2025.1080p.UHD.BluRay.x265.HDR.DV.DD+5.1-Pahe.in.mkv"
 
       output_name:
         description: "Nama file output MP4 (tanpa ekstensi)"
@@ -33,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository (subtitle.srt ikut ter-clone)
+      # 1️⃣ Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -43,19 +42,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg rclone curl
 
-      # 3️⃣ Setup rclone config dari secret base64
-      - name: Setup rclone config (base64)
+      # 3️⃣ Setup rclone
+      - name: Setup rclone config
         run: |
           mkdir -p ~/.config/rclone
           echo "${{ secrets.RCLONE_CONF_B64 }}" | base64 --decode > ~/.config/rclone/rclone.conf
-          rclone listremotes
 
       # 4️⃣ Download MKV
       - name: Download MKV file
         run: |
           curl -L -o input.mkv "${{ github.event.inputs.source_url }}"
 
-      # 5️⃣ Convert MKV ke MP4 (burn subtitle dari repository)
+      # 5️⃣ Convert MKV → MP4 (subtitle dari repo)
       - name: Convert MKV to MP4
         run: |
           ffmpeg -i input.mkv \
@@ -70,9 +68,22 @@ jobs:
         run: |
           rclone copy "${{ github.event.inputs.output_name }}.mp4" \
             "gdrive:/${{ github.event.inputs.drive_path }}/" \
-            -P --transfers=${{ github.event.inputs.rclone_transfers }} --checkers=8
+            -P --transfers=${{ github.event.inputs.rclone_transfers }}
 
-      # 7️⃣ List folder di Google Drive (validasi)
-      - name: List files in Google Drive
+      # ✅ Telegram SUCCESS
+      - name: Telegram notify SUCCESS
+        if: success()
         run: |
-          rclone lsl "gdrive:/${{ github.event.inputs.drive_path }}/"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+          -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+          -d parse_mode="HTML" \
+          -d text="✅ <b>SUCCESS</b>%0A📁 File: <code>${{ github.event.inputs.output_name }}.mp4</code>%0A📂 Drive: <code>${{ github.event.inputs.drive_path }}</code>"
+
+      # ❌ Telegram FAILED
+      - name: Telegram notify FAILED
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+          -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+          -d parse_mode="HTML" \
+          -d text="❌ <b>FAILED</b>%0A📁 File: <code>${{ github.event.inputs.output_name }}.mp4</code>%0A🔗 Source: <code>${{ github.event.inputs.source_url }}</code>"
