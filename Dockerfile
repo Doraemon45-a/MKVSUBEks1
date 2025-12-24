@@ -1,0 +1,37 @@
+name: Convert MKV to MP4 and Upload to Google Drive
+
+on:
+  workflow_dispatch:
+
+jobs:
+  convert_and_upload:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg rclone
+
+    # Buat file rclone.conf dari GitHub Secret
+    - name: Setup rclone config
+      run: |
+        mkdir -p ~/.config/rclone
+        echo "${{ secrets.RCLONE_CONF }}" > ~/.config/rclone/rclone.conf
+
+    - name: Download MKV file
+      run: |
+        curl -L -o video.mkv "https://tipigd.tipikug.workers.dev/0:/movieb/NeZha.2.2025.1080p.WEB-DL.x264-Pahe.in.mkv"
+
+    - name: Convert MKV to MP4
+      run: |
+        ffmpeg -i video.mkv -vf "scale=1920:1080,subtitles=subtitle.srt:force_style='Fontsize=18,MarginV=25'" \
+        -r 24 -c:v libx264 -preset veryfast -crf 30 -c:a aac -b:a 160k -ac 2 \
+        -af "volume=2.5" -movflags +faststart video.mp4
+
+    - name: Upload to Google Drive
+      run: |
+        rclone copy video.mp4 gdrive:/ConvertedVideos/ -P
